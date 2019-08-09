@@ -18,19 +18,31 @@ from bokeh.models.callbacks import CustomJS
 # read data
 root = "data"
 templates = np.load(os.path.join(root, "templates.npy"))
+#templates = np.load('/media/cat/4TBSSD/liam/512channels/2009-04-13-5_30mins/aug_9_run/templates.npy')
 templates = templates.transpose([2, 1, 0])
 print ("TEMPLATES: ", templates.shape)
 
 geometry = np.loadtxt(root+ "/ej49_geometry1.txt")
+#geometry = np.loadtxt('/media/cat/4TBSSD/liam/512channels/2009-04-13-5_30mins/2009-04-13-5_30mins.txt')
 print (" reading spatial RFs previously saved, can switch to .npz file after")
-#sta = np.load(root+"/STA_data.npz",allow_pickle=True)
-#spatial = sta["STA_spatial"][:, 1, :].reshape([-1, 64, 32])
+sta = np.load(root+"/STA_data.npz",allow_pickle=True)
+#sta = np.load('/media/cat/4TBSSD/liam/512channels/2009-04-13-5_30mins/aug_9_run/stas/STA_data.npz',
+#                allow_pickle=True)
+spatial = sta["STA_spatial"][:, 1, :].reshape([-1, 64, 32])
 #np.save(root+'/spatial.npy',spatial)
-spatial = np.load(root+'/spatial.npy')
+#spatial = np.load(root+'/spatial.npy')
 contour_data = np.load(root+"/STA_contour_data.npz",allow_pickle=True)['cell_type_vec']
+#contour_data = np.load('/media/cat/4TBSSD/liam/512channels/2009-04-13-5_30mins/aug_9_run/stas/STA_contour_data.npz',
+#                        allow_pickle=True)['cell_type_vec']
+#contours = np.load('/media/cat/4TBSSD/liam/512channels/2009-04-13-5_30mins/aug_9_run/stas/STA_contour_data.npz',
+#                        allow_pickle=True)['Gaussian_params']
 contours = np.load(root+"/STA_contour_data.npz",allow_pickle=True)['Gaussian_params']
 contours[:, 5] = contours[:, 5] * -1
 
+# temporal fits (time courses)
+tcs = np.load('/media/cat/4TBSSD/liam/512channels/2009-04-13-5_30mins/aug_9_run/new_fits/temporal_sta.npy')
+
+print ("DONE LOADING")
 
 # ****************************************************
 # ****************************************************
@@ -106,7 +118,7 @@ class ReceptiveField(object):
 
 class SpikeCanvas(object):
 
-    def __init__(self, rec_field, wave_form, n_unit, contour_data, root):
+    def __init__(self, rec_field, wave_form, n_unit, contour_data, tcs, root):
         self.colors = [
                 'dodgerblue', 'darkorange', 'forestgreen', 'red', 'orchid',
                 'mediumspringgreen']
@@ -116,6 +128,7 @@ class SpikeCanvas(object):
         self.wave_form = wave_form
         self.n_unit = n_unit
         self.contour_data = []
+        self.tcs = tcs
         
         # append garbage canvas plot also
         for k in range(len(contour_data)):
@@ -136,6 +149,7 @@ class SpikeCanvas(object):
         self.make_plots_contours()
         self.make_plots_traces()
         self.make_plots_receptive_fields()
+        self.make_plots_tcs()
         self.make_widgets2()
 
     def make_plots_tiles(self):
@@ -149,6 +163,7 @@ class SpikeCanvas(object):
         self.glyphs[name] = []
         self.sources[name] = []
         for i in range(len(titles)):
+            print ("plotting: ", titles[i])
             g = figure(
                 plot_height=400, plot_width=200, title=titles[i],
                 tools="pan,reset,wheel_zoom,tap",
@@ -191,7 +206,6 @@ class SpikeCanvas(object):
 
 
     def make_plots_traces(self):
-        #print ("FUNCTION: make_plots_traces")
         # Set up trace plots
         name = "traces"
         self.glyphs[name] = []
@@ -220,8 +234,61 @@ class SpikeCanvas(object):
 
         self.plots[name].legend.click_policy = "hide"
 
+    def make_plots_tcs(self):
+        """Initialize receptive fields images."""
+        name = "tcs"
+        self.glyphs[name] = []
+        self.sources[name] = []
+
+        self.plots[name] = figure(
+            plot_height=400, plot_width=800, title="Time course fits",
+            tools="pan,reset,wheel_zoom")
+
+        x = np.arange(30)
+        y = np.zeros(30)
+        clrs = ['black','red','green','blue']
+
+        # plot y=0 line
+        x_array = []
+        y_array = []
+        y_array.append(y)
+        for k in range(4):
+            x_array.append(x)
+        for i, unit in enumerate([0]):
+            for p in range(3):
+                y = self.tcs[unit][p]
+                y_array.append(y)
+        
+        #colors = factor_cmap('ur', palette=Category20b_20, factors=4) 
+        print (" len(y_array): ", len(y_array))
+        print (" len(x_array): ", len(x_array))
+        
+        self.sources['tcs'].append(ColumnDataSource(
+             data=dict(color=clrs, x=x_array, y=y_array)))
+             
+        self.plots[name].multi_line(
+                    xs="x", ys="y", 
+                    line_width=2, line_alpha=1.0, line_color='color',
+                    source=self.sources[name][-1]) # add the data just appended       
+             
+        # clrs=['red','green','blue']
+        # for i, unit in enumerate([0]):
+            # #x, y = self.wave_form.get_template_lines(unit=unit)
+            # x = np.arange(30)
+            # for p in range(3):
+                # y = self.tcs[unit][p]
+                # self.sources[name].append(ColumnDataSource(
+                    # data=dict(x=x, y=y)))
+                
+                # self.plots[name].line(
+                        # x="x", y="y", legend="# {}".format(i + 1),
+                        # line_width=2, line_alpha=0.7, line_color=clrs[p],
+                        # source=self.sources[name][-1]) # add the data just appended
+
+        # self.plots[name].legend.click_policy = "hide"
+                
+
     def make_plots_receptive_fields(self):
-        #print ("FUNCTION: make_plots_receptive_fields")
         """Initialize receptive fields images."""
         name = "rf"
         self.plots[name] = []
@@ -239,12 +306,11 @@ class SpikeCanvas(object):
             self.sources[name].append(ColumnDataSource(
                     data=dict(d=[img])))
             
-            #print ("make plot receptive fields: ", i, unit)
-            
             color_mapper = LinearColorMapper(palette="Viridis256", low=-vmax, high=vmax)
             self.plots[name][-1].image(color_mapper=color_mapper,
                 image='d', x=0, y=0, dw=32, dh=64,
                 source=self.sources[name][-1])
+
                
     def update_traces(self, units, scale, squeeze):
 
@@ -257,20 +323,98 @@ class SpikeCanvas(object):
         # Turn off the rest.
         for i in range(n, self.n_unit):
             self.sources["traces"][i].data = dict(x=[], y=[])
+               
+    def update_tcs(self, units, scale, squeeze):
 
-    def update_timecourses(self, units, scale, squeeze):
+        x = np.arange(30)
+        y = np.zeros(30)
+        clrs = ['black','red','green','blue']
 
-        """Update the spatio-temporal traces."""
-        n = len(units)
-        for i, unit in enumerate(units[:self.n_unit]):
-            x, y = self.wave_form.get_template_lines(
-                    unit=unit, scale=scale, squeeze=squeeze)
-            self.sources["traces"][i].data = dict(x=x, y=y)
-        # Turn off the rest.
-        for i in range(n, self.n_unit):
-            self.sources["traces"][i].data = dict(x=[], y=[])
+        # plot y=0 line
+        x_array = []
+        y_array = []
+        y_array.append(y)
+        for k in range(4):
+            x_array.append(x)
+        for i, unit in enumerate(units):
+            for p in range(3):
+                y = self.tcs[unit][p]
+                y_array.append(y)
+        
+        #colors = factor_cmap('ur', palette=Category20b_20, factors=4) 
+        print (" len(y_array): ", len(y_array))
+        print (" len(x_array): ", len(x_array))
+        
+        self.sources['tcs'][0].data = dict(color=clrs, 
+                                x=x_array, y=y_array)
+             
+             
+        # name = "tcs"
+        # #self.glyphs[name] = []
+        # self.sources[name] = []
+        # self.plots[name].clear()
+        # #self.plots[name].append(figure(
+        # #    plot_height=400, plot_width=200, title=name,
+        # #    tools="pan,reset,wheel_zoom",
+        # #    x_range=(0, 32), y_range=(0, 64)))
 
+        # print ("updating tcs...")
+        # clrs=['red','green','blue']
+        # for i, unit in enumerate(units):
+            # #x, y = self.wave_form.get_template_lines(unit=unit)
+            # x = np.arange(30)
+            # for p in range(3):
+                # y = self.tcs[unit][p]
+                # self.sources[name] = ColumnDataSource(
+                    # data=dict(x=x, y=y))
+                
+               # # self.plots[name].line(
+               # #         x="x", y="y", 
+               # #         line_width=2, line_alpha=0.7, line_color=clrs[p],
+               # #         source=self.sources[name]) # add the data just appended
 
+        # #self.plots[name].legend.click_policy = "hide"
+        
+        # if False:
+            # name = "tcs"
+            # for k in range(len(self.sources["tcs"])):
+                # self.sources["tcs"][k].data = dict(x=[], y=[])
+
+            # x = np.arange(30)
+            # y = np.zeros(30)
+            # clrs = ['black','red','green','blue']
+
+            # # plot y=0 line
+            # x_array = []
+            # y_array = []
+            # y_array.append(y)
+            # for k in range(4):
+                # x_array.append(x)
+            # for i, unit in enumerate(units[:self.n_unit]):
+                # for p in range(3):
+                    # y = self.tcs[unit][p]
+                    # y_array.append(y)
+            
+            # #colors = factor_cmap('ur', palette=Category20b_20, factors=4) 
+            # print (" len(y_array): ", len(y_array))
+            # print (" len(x_array): ", len(x_array))
+            
+            # self.sources['tcs'].append(ColumnDataSource(
+                 # data=dict(x=x_array, y=y_array)))
+                 
+            # self.plots['tcs'].multi_line(
+                # xs="x", ys="y", 
+                # line_width=4, line_alpha=1., 
+                # line_color=clrs,
+                # source=self.sources['tcs'][-1])
+                
+            # # self.plots[name].multi_line(
+                # # xs="x", ys="y", legend="# {}".format(i + 1),
+                # # line_width=2, line_alpha=0.7, line_color=self.colors[i],
+                # # source=self.sources[name][-1])
+                    
+                        
+        
     def update_errors(self, scale, squeeze):
 
         """Update the error bars on the trace plot."""
@@ -306,26 +450,21 @@ class SpikeCanvas(object):
             self.sources["contours"][i].data = dict()
 
     def move_cell(self,  attrname, old, new):
-        
+
+        # get info on calsses
         current_class = self.current_class
         target_class = self.titles.index(self.widgets["moveto"].value)
-        #print ("current class: ", self.current_class, " target class: ",
-        #        target_class)
         
         # update current class
         current_cells = self.contour_data[current_class]
-        #print ("cells in current class (premove): ", self.contour_data[current_class])
         idx_local = np.where(current_cells==self.selected_unit)[0]
         updated_current = np.delete(current_cells, idx_local)
         self.contour_data[current_class] = updated_current
-        #print ("cells in current class (postmove): ", self.contour_data[current_class])
         
         # update target class
         target_cells = self.contour_data[target_class]
-        #print ("cells in target class (premove): ", self.contour_data[target_class])
         updated_target = np.append(target_cells, self.selected_unit)
         self.contour_data[target_class] = updated_target
-        #print ("cells in target class (postmove): ", self.contour_data[target_class])
         
         # reset everythign after reassigning cells
         main_functions(self.rec_field, self.wave_form, self.contour_data)
@@ -337,7 +476,7 @@ class SpikeCanvas(object):
     def load_contours(self, attrname, old, new):
         print ("LOADING", self.root_dir+'/cell_type_vec.npy') 
         self.contour_data = np.load(self.root_dir+'/cell_type_vec.npy',allow_pickle=True)
-        main_functions(self.rec_field, self.wave_form, self.contour_data)
+        main_functions(self.rec_field, self.wave_form, self.contour_data, self.tcs, self.root_dir)
 
 
     # ******************************************
@@ -378,6 +517,9 @@ class SpikeCanvas(object):
 
     def update_data(self, units, scale, squeeze):
         """The callback for the contour selection"""
+        self.update_traces(units=units, scale=scale, squeeze=squeeze)
+        self.update_tcs(units=units, scale=scale, squeeze=squeeze)
+        self.update_errors(scale=scale, squeeze=squeeze)
         self.update_contours2(units)
         self.update_rfs(units)
 
@@ -463,7 +605,7 @@ rec_field = ReceptiveField(
         contours=contours, spatial=spatial)
         
         
-def main_functions(rec_field, wf, contour_data):
+def main_functions(rec_field, wf, contour_data, tcs, root):
     
     curdoc().clear()
 
@@ -471,7 +613,8 @@ def main_functions(rec_field, wf, contour_data):
     canvas = SpikeCanvas(
             rec_field=rec_field, wave_form=wf, n_unit=2, 
             contour_data=contour_data,
-            root=root)
+            root=root,
+            tcs=tcs)
             
     canvas.glyphs["tiles"][0].data_source.selected.on_change(
             'indices', canvas.callback0)
@@ -504,7 +647,8 @@ def main_functions(rec_field, wf, contour_data):
             
     rows = []
     rows.append(row(canvas.plots["tiles"], width=800))
-    rows.append(row(canvas.plots["rf"], width=200 * canvas.n_unit))
+    rows.append(row(canvas.plots["rf"], width = 200*2))
+    rows.append(row(canvas.plots['tcs'], width=800))
     rows.append(row(inputs, canvas.plots["traces"], width=1200))
     layout = column(rows)
     
@@ -512,4 +656,4 @@ def main_functions(rec_field, wf, contour_data):
     curdoc().title = "Sliders"
 
 
-main_functions(rec_field, wf, contour_data)
+main_functions(rec_field, wf, contour_data, tcs, root)
