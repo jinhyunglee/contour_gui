@@ -16,27 +16,27 @@ from bokeh.models.callbacks import CustomJS
 
 
 # read data
-root = "data"
+root = "/media/cat/4TBSSD/liam/512channels/2009-04-13-5_30mins/aug_9_run/"
 templates = np.load(os.path.join(root, "templates.npy"))
 #templates = np.load('/media/cat/4TBSSD/liam/512channels/2009-04-13-5_30mins/aug_9_run/templates.npy')
 templates = templates.transpose([2, 1, 0])
 print ("TEMPLATES: ", templates.shape)
 
-geometry = np.loadtxt(root+ "/ej49_geometry1.txt")
-#geometry = np.loadtxt('/media/cat/4TBSSD/liam/512channels/2009-04-13-5_30mins/2009-04-13-5_30mins.txt')
+#geometry = np.loadtxt(root+ "/ej49_geometry1.txt")
+geometry = np.loadtxt('/media/cat/4TBSSD/liam/512channels/2009-04-13-5_30mins/2009-04-13-5_30mins.txt')
 print (" reading spatial RFs previously saved, can switch to .npz file after")
-sta = np.load(root+"/STA_data.npz",allow_pickle=True)
-#sta = np.load('/media/cat/4TBSSD/liam/512channels/2009-04-13-5_30mins/aug_9_run/stas/STA_data.npz',
-#                allow_pickle=True)
+#sta = np.load(root+"/STA_data.npz",allow_pickle=True)
+sta = np.load('/media/cat/4TBSSD/liam/512channels/2009-04-13-5_30mins/aug_9_run/stas/STA_data.npz',
+                allow_pickle=True)
 spatial = sta["STA_spatial"][:, 1, :].reshape([-1, 64, 32])
 #np.save(root+'/spatial.npy',spatial)
 #spatial = np.load(root+'/spatial.npy')
-contour_data = np.load(root+"/STA_contour_data.npz",allow_pickle=True)['cell_type_vec']
-#contour_data = np.load('/media/cat/4TBSSD/liam/512channels/2009-04-13-5_30mins/aug_9_run/stas/STA_contour_data.npz',
-#                        allow_pickle=True)['cell_type_vec']
-#contours = np.load('/media/cat/4TBSSD/liam/512channels/2009-04-13-5_30mins/aug_9_run/stas/STA_contour_data.npz',
-#                        allow_pickle=True)['Gaussian_params']
-contours = np.load(root+"/STA_contour_data.npz",allow_pickle=True)['Gaussian_params']
+#contour_data = np.load(root+"/STA_contour_data.npz",allow_pickle=True)['cell_type_vec']
+contour_data = np.load('/media/cat/4TBSSD/liam/512channels/2009-04-13-5_30mins/aug_9_run/stas/STA_contour_data.npz',
+                        allow_pickle=True)['cell_type_vec']
+contours = np.load('/media/cat/4TBSSD/liam/512channels/2009-04-13-5_30mins/aug_9_run/stas/STA_contour_data.npz',
+                        allow_pickle=True)['Gaussian_params']
+#contours = np.load(root+"/STA_contour_data.npz",allow_pickle=True)['Gaussian_params']
 contours[:, 5] = contours[:, 5] * -1
 
 # temporal fits (time courses)
@@ -53,13 +53,15 @@ print ("DONE LOADING")
 class WaveForms(object):
 
     def __init__(self, wave_forms):
+        print (" loading waveforms)")
         self.wave_forms = wave_forms
         self.n_unit, self.n_channel, self.n_times = self.wave_forms.shape
 
         self.ptp = self.wave_forms.ptp(-1).max(-1)
         self.active_chans = self.wave_forms.ptp(-1) > 2.
-        self.pairwise_dist()
-        self.similar_units = self.pdist.argsort(axis=1)
+        #self.pairwise_dist()
+        #self.similar_units = self.pdist.argsort(axis=1)
+        self.similar_units = []
         self.vis_chan = self.update_vis_chan()
 
     def update_vis_chan(self, value=2.):
@@ -95,6 +97,7 @@ class WaveForms(object):
 # ****************************************************
 
 class ReceptiveField(object):
+    print (" loading rfs)")
 
     def __init__(self, contours, spatial):
         self.contours = contours
@@ -143,7 +146,7 @@ class SpikeCanvas(object):
         self.current_class = 0
         
         # The first set of units to be displayed.
-        self.show_units = self.wave_form.similar_units[0, :self.n_unit]
+        self.show_units = [0,1] #self.wave_form.similar_units[0, :self.n_unit]
        
         self.make_plots_tiles()
         self.make_plots_contours()
@@ -341,78 +344,8 @@ class SpikeCanvas(object):
                 y = self.tcs[unit][p]
                 y_array.append(y)
         
-        #colors = factor_cmap('ur', palette=Category20b_20, factors=4) 
-        print (" len(y_array): ", len(y_array))
-        print (" len(x_array): ", len(x_array))
-        
         self.sources['tcs'][0].data = dict(color=clrs, 
                                 x=x_array, y=y_array)
-             
-             
-        # name = "tcs"
-        # #self.glyphs[name] = []
-        # self.sources[name] = []
-        # self.plots[name].clear()
-        # #self.plots[name].append(figure(
-        # #    plot_height=400, plot_width=200, title=name,
-        # #    tools="pan,reset,wheel_zoom",
-        # #    x_range=(0, 32), y_range=(0, 64)))
-
-        # print ("updating tcs...")
-        # clrs=['red','green','blue']
-        # for i, unit in enumerate(units):
-            # #x, y = self.wave_form.get_template_lines(unit=unit)
-            # x = np.arange(30)
-            # for p in range(3):
-                # y = self.tcs[unit][p]
-                # self.sources[name] = ColumnDataSource(
-                    # data=dict(x=x, y=y))
-                
-               # # self.plots[name].line(
-               # #         x="x", y="y", 
-               # #         line_width=2, line_alpha=0.7, line_color=clrs[p],
-               # #         source=self.sources[name]) # add the data just appended
-
-        # #self.plots[name].legend.click_policy = "hide"
-        
-        # if False:
-            # name = "tcs"
-            # for k in range(len(self.sources["tcs"])):
-                # self.sources["tcs"][k].data = dict(x=[], y=[])
-
-            # x = np.arange(30)
-            # y = np.zeros(30)
-            # clrs = ['black','red','green','blue']
-
-            # # plot y=0 line
-            # x_array = []
-            # y_array = []
-            # y_array.append(y)
-            # for k in range(4):
-                # x_array.append(x)
-            # for i, unit in enumerate(units[:self.n_unit]):
-                # for p in range(3):
-                    # y = self.tcs[unit][p]
-                    # y_array.append(y)
-            
-            # #colors = factor_cmap('ur', palette=Category20b_20, factors=4) 
-            # print (" len(y_array): ", len(y_array))
-            # print (" len(x_array): ", len(x_array))
-            
-            # self.sources['tcs'].append(ColumnDataSource(
-                 # data=dict(x=x_array, y=y_array)))
-                 
-            # self.plots['tcs'].multi_line(
-                # xs="x", ys="y", 
-                # line_width=4, line_alpha=1., 
-                # line_color=clrs,
-                # source=self.sources['tcs'][-1])
-                
-            # # self.plots[name].multi_line(
-                # # xs="x", ys="y", legend="# {}".format(i + 1),
-                # # line_width=2, line_alpha=0.7, line_color=self.colors[i],
-                # # source=self.sources[name][-1])
-                    
                         
         
     def update_errors(self, scale, squeeze):
@@ -528,7 +461,7 @@ class SpikeCanvas(object):
         squeeze = self.widgets["squeeze"].value
         scale = self.widgets["scale"].value
      
-        units = self.wave_form.similar_units[unit, :self.n_unit]
+        units = unit# self.wave_form.similar_units[unit, :self.n_unit]
         self.update_data(units, scale, squeeze)
 
     # ****************************************************
