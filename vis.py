@@ -400,7 +400,7 @@ class SpikeCanvas(object):
         self.contour_data[target_class] = updated_target
         
         # reset everythign after reassigning cells
-        main_functions(self.rec_field, self.wave_form, self.contour_data)
+        main_functions(self.rec_field, self.wave_form, self.contour_data, self.tcs, self.root_dir)
 
     def save_contours(self, attrname, old, new):
         print ("SAVING", self.root_dir+'/cell_type_vec.npy') 
