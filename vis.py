@@ -13,34 +13,66 @@ from bokeh.models.widgets import Slider, TextInput, Select
 from bokeh.plotting import figure
 from bokeh.models.glyphs import Patches, MultiLine, Ellipse
 from bokeh.models.callbacks import CustomJS
-
+from bokeh.events import DoubleTap
 
 # read data
+geometry = np.loadtxt('/media/cat/4TBSSD/liam/512channels/2009-04-13-5_30mins/2009-04-13-5_30mins.txt')
+
 root = "/media/cat/4TBSSD/liam/512channels/2009-04-13-5_30mins/aug_9_run/"
 templates = np.load(os.path.join(root, "templates.npy"))
+
 #templates = np.load('/media/cat/4TBSSD/liam/512channels/2009-04-13-5_30mins/aug_9_run/templates.npy')
 templates = templates.transpose([2, 1, 0])
 print ("TEMPLATES: ", templates.shape)
 
-#geometry = np.loadtxt(root+ "/ej49_geometry1.txt")
-geometry = np.loadtxt('/media/cat/4TBSSD/liam/512channels/2009-04-13-5_30mins/2009-04-13-5_30mins.txt')
-print (" reading spatial RFs previously saved, can switch to .npz file after")
-#sta = np.load(root+"/STA_data.npz",allow_pickle=True)
-sta = np.load('/media/cat/4TBSSD/liam/512channels/2009-04-13-5_30mins/aug_9_run/stas/STA_data.npz',
-                allow_pickle=True)
-spatial = sta["STA_spatial"][:, 1, :].reshape([-1, 64, 32])
-#np.save(root+'/spatial.npy',spatial)
-#spatial = np.load(root+'/spatial.npy')
-#contour_data = np.load(root+"/STA_contour_data.npz",allow_pickle=True)['cell_type_vec']
-contour_data = np.load('/media/cat/4TBSSD/liam/512channels/2009-04-13-5_30mins/aug_9_run/stas/STA_contour_data.npz',
-                        allow_pickle=True)['cell_type_vec']
-contours = np.load('/media/cat/4TBSSD/liam/512channels/2009-04-13-5_30mins/aug_9_run/stas/STA_contour_data.npz',
-                        allow_pickle=True)['Gaussian_params']
-#contours = np.load(root+"/STA_contour_data.npz",allow_pickle=True)['Gaussian_params']
-contours[:, 5] = contours[:, 5] * -1
+alex = True 
+if alex:
 
-# temporal fits (time courses)
-tcs = np.load('/media/cat/4TBSSD/liam/512channels/2009-04-13-5_30mins/aug_9_run/new_fits/temporal_sta.npy')
+    root = '/media/cat/4TBSSD/liam/512channels/2009-04-13-5_30mins/alexandra/stas_5mins/'
+
+    print (" reading spatial RFs previously saved, can switch to .npz file after")
+    sta = np.load(root+"/STA_data.npz",allow_pickle=True)
+    #sta = np.load('/media/cat/4TBSSD/liam/512channels/2009-04-13-5_30mins/aug_9_run/stas/STA_data.npz',
+    #                allow_pickle=True)
+    spatial = sta["STA_spatial"][:, 1, :].reshape([-1, 64, 32])
+    #spatial = np.load('/media/cat/4TBSSD/liam/512channels/2009-04-13-5_30mins/alexandra/spatial_sta.npy')
+    #np.save(root+'/spatial.npy',spatial)
+    #spatial = np.load(root+'/spatial.npy')
+    #contour_data = np.load(root+"/STA_contour_data.npz",allow_pickle=True)['cell_type_vec']
+    if True:
+        contour_data = np.load('/media/cat/4TBSSD/liam/512channels/2009-04-13-5_30mins/alexandra/STA_contour_data.npz',
+                                allow_pickle=True)['cell_type_vec']
+    else:
+        contour_ids = np.load('/media/cat/4TBSSD/liam/512channels/2009-04-13-5_30mins/aug_9_run/labels.npy')
+        contour_data = []
+        for k in np.arange(8):
+            contour_data.append(np.where(contour_ids==k)[0])
+        contour_data.append(np.where(contour_ids==-1)[0])
+        contour_data=np.array(contour_data)
+
+    contours = np.load('/media/cat/4TBSSD/liam/512channels/2009-04-13-5_30mins/alexandra/STA_contour_data.npz',
+                            allow_pickle=True)['Gaussian_params']
+    #contours = np.load(root+"/STA_contour_data.npz",allow_pickle=True)['Gaussian_params']
+    contours[:, 5] = contours[:, 5] * -1
+
+    # temporal fits (time courses)
+    tcs = np.load('/media/cat/4TBSSD/liam/512channels/2009-04-13-5_30mins/alexandra/temporal_sta.npy')
+    print ("TCS: ", tcs.shape)
+else:
+    root = '/media/cat/4TBSSD/liam/512channels/2009-04-13-5_30mins/aug_9_run/'
+    sta = np.load(root+"/STA_data.npz",allow_pickle=True)
+    spatial = sta["STA_spatial"][:, 1, :].reshape([-1, 64, 32])
+    STA_contours = np.load('/media/cat/4TBSSD/liam/512channels/2009-04-13-5_30mins/aug_9_run/stas/STA_contour_data.npz',allow_pickle=True)
+    contour_data = STA_contours['cell_type_vec']
+    contours = STA_contours['Gaussian_params']
+    #contours = np.load(root+"/STA_contour_data.npz",allow_pickle=True)['Gaussian_params']
+    contours[:, 5] = contours[:, 5] * -1
+    tcs = np.load('/media/cat/4TBSSD/liam/512channels/2009-04-13-5_30mins/aug_9_run/spike_train_gaussians.npz')["this_STA_temporal"]
+    print (tcs.shape)
+
+
+# keep track of number of main call iterations
+iteration = 0
 
 print ("DONE LOADING")
 
@@ -121,7 +153,8 @@ class ReceptiveField(object):
 
 class SpikeCanvas(object):
 
-    def __init__(self, rec_field, wave_form, n_unit, contour_data, tcs, root):
+    def __init__(self, rec_field, wave_form, n_unit, contour_data, tcs, root,
+                    iteration):
         self.colors = [
                 'dodgerblue', 'darkorange', 'forestgreen', 'red', 'orchid',
                 'mediumspringgreen']
@@ -130,14 +163,19 @@ class SpikeCanvas(object):
         self.rec_field = rec_field
         self.wave_form = wave_form
         self.n_unit = n_unit
-        self.contour_data = []
         self.tcs = tcs
         
-        # append garbage canvas plot also
+        # append contour data to list
+        self.contour_data = []
         for k in range(len(contour_data)):
             self.contour_data.append(contour_data[k])
-        self.contour_data.append(np.empty((0),'int64'))
+        
+        # only add the extra garbage container for the first iteration
+        if iteration ==0:
+            self.contour_data.append(np.empty((0),'int64'))
         self.contour_data = np.array(self.contour_data)
+
+        self.iteration = iteration+1
 
         self.plots = {}
         self.glyphs = {}
@@ -157,7 +195,7 @@ class SpikeCanvas(object):
 
     def make_plots_tiles(self):
         """Initializing the RF contour tiles."""
-        #print ("FUNCTION: make_plots_tiles")
+        
         name = "tiles"
         titles = ['ON Parasol', 'OFF Parasol', 'ON Midget', 'OFF Midget', 'Large ON', 'Large OFF',
                     'Small Bistratified', 'Other', 'Garbage']
@@ -191,6 +229,13 @@ class SpikeCanvas(object):
                     
             #plot_tiles[i].add_glyph(source_tiles[i], glyph_tiles)
             self.glyphs[name].append(glyph)
+
+
+
+            source = ColumnDataSource(data=dict(x=[], y=[]))   
+            g.circle(source=source,x='x',y='y') 
+
+            g.on_event(DoubleTap, self.move_cell_to_other_doubleclick)
 
    
     def make_plots_contours(self):
@@ -263,9 +308,6 @@ class SpikeCanvas(object):
                 y_array.append(y)
         
         #colors = factor_cmap('ur', palette=Category20b_20, factors=4) 
-        print (" len(y_array): ", len(y_array))
-        print (" len(x_array): ", len(x_array))
-        
         self.sources['tcs'].append(ColumnDataSource(
              data=dict(color=clrs, x=x_array, y=y_array)))
              
@@ -274,22 +316,6 @@ class SpikeCanvas(object):
                     line_width=2, line_alpha=1.0, line_color='color',
                     source=self.sources[name][-1]) # add the data just appended       
              
-        # clrs=['red','green','blue']
-        # for i, unit in enumerate([0]):
-            # #x, y = self.wave_form.get_template_lines(unit=unit)
-            # x = np.arange(30)
-            # for p in range(3):
-                # y = self.tcs[unit][p]
-                # self.sources[name].append(ColumnDataSource(
-                    # data=dict(x=x, y=y)))
-                
-                # self.plots[name].line(
-                        # x="x", y="y", legend="# {}".format(i + 1),
-                        # line_width=2, line_alpha=0.7, line_color=clrs[p],
-                        # source=self.sources[name][-1]) # add the data just appended
-
-        # self.plots[name].legend.click_policy = "hide"
-                
 
     def make_plots_receptive_fields(self):
         """Initialize receptive fields images."""
@@ -309,7 +335,7 @@ class SpikeCanvas(object):
             self.sources[name].append(ColumnDataSource(
                     data=dict(d=[img])))
             
-            color_mapper = LinearColorMapper(palette="Viridis256", low=-vmax, high=vmax)
+            color_mapper = LinearColorMapper(palette="Viridis256")#, low=-vmax, high=vmax)
             self.plots[name][-1].image(color_mapper=color_mapper,
                 image='d', x=0, y=0, dw=32, dh=64,
                 source=self.sources[name][-1])
@@ -318,6 +344,7 @@ class SpikeCanvas(object):
     def update_traces(self, units, scale, squeeze):
 
         """Update the spatio-temporal traces."""
+        print ("UPdate traces: ", len(units), units)
         n = len(units)
         for i, unit in enumerate(units[:self.n_unit]):
             x, y = self.wave_form.get_template_lines(
@@ -358,6 +385,7 @@ class SpikeCanvas(object):
     def update_rfs(self, units):
         #print ("FUNCTION: update_rfs")
         """Update receptive fields images."""
+        print ("UPdate rfs: ", len(units), units)
         n = len(units)
         for i, unit in enumerate(units[:self.n_unit]):
             self.sources["rf"][i].data = dict(d=[self.rec_field.spatial[unit]])
@@ -372,6 +400,7 @@ class SpikeCanvas(object):
     def update_contours2(self, units):
         #print ("FUNCTION: update_contours2")
         """Update the contour plot ellipses for selected units."""
+        print ("UPdate contours: ", len(units), units)
         n = len(units)
         
         for i, unit in enumerate(units[:self.n_unit]):
@@ -382,6 +411,34 @@ class SpikeCanvas(object):
         for i in range(n, self.n_unit):
             self.sources["contours"][i].data = dict()
 
+           
+    def move_cell_to_other_doubleclick(self,event):
+        #Coords=(event.x,event.y)
+        #coordList.append(Coords) 
+
+        #source.data = dict(x=[i[0] for i in coordList], y=[i[1] for i in coordList])      
+
+        # get info on calsses
+        current_class = self.current_class
+        target_class = self.titles.index('Large OFF')
+        
+        # update current class
+        current_cells = self.contour_data[current_class]
+        idx_local = np.where(current_cells==self.selected_unit)[0]
+        updated_current = np.delete(current_cells, idx_local)
+        self.contour_data[current_class] = updated_current
+        
+        # update target class
+        target_cells = self.contour_data[target_class]
+        updated_target = np.append(target_cells, self.selected_unit)
+        self.contour_data[target_class] = updated_target
+        
+        # reset everythign after reassigning cells
+        main_functions(self.rec_field, self.wave_form, self.contour_data, 
+                       self.tcs, self.root_dir, self.iteration)
+                       
+                       
+                
     def move_cell(self,  attrname, old, new):
 
         # get info on calsses
@@ -400,7 +457,8 @@ class SpikeCanvas(object):
         self.contour_data[target_class] = updated_target
         
         # reset everythign after reassigning cells
-        main_functions(self.rec_field, self.wave_form, self.contour_data, self.tcs, self.root_dir)
+        main_functions(self.rec_field, self.wave_form, self.contour_data, 
+                       self.tcs, self.root_dir, self.iteration)
 
     def save_contours(self, attrname, old, new):
         print ("SAVING", self.root_dir+'/cell_type_vec.npy') 
@@ -409,7 +467,8 @@ class SpikeCanvas(object):
     def load_contours(self, attrname, old, new):
         print ("LOADING", self.root_dir+'/cell_type_vec.npy') 
         self.contour_data = np.load(self.root_dir+'/cell_type_vec.npy',allow_pickle=True)
-        main_functions(self.rec_field, self.wave_form, self.contour_data, self.tcs, self.root_dir)
+        main_functions(self.rec_field, self.wave_form, self.contour_data, 
+                       self.tcs, self.root_dir, self.iteration)
 
 
     # ******************************************
@@ -538,7 +597,7 @@ rec_field = ReceptiveField(
         contours=contours, spatial=spatial)
         
         
-def main_functions(rec_field, wf, contour_data, tcs, root):
+def main_functions(rec_field, wf, contour_data, tcs, root, iteration):
     
     curdoc().clear()
 
@@ -547,7 +606,8 @@ def main_functions(rec_field, wf, contour_data, tcs, root):
             rec_field=rec_field, wave_form=wf, n_unit=2, 
             contour_data=contour_data,
             root=root,
-            tcs=tcs)
+            tcs=tcs,
+            iteration=iteration)
             
     canvas.glyphs["tiles"][0].data_source.selected.on_change(
             'indices', canvas.callback0)
@@ -589,4 +649,4 @@ def main_functions(rec_field, wf, contour_data, tcs, root):
     curdoc().title = "Sliders"
 
 
-main_functions(rec_field, wf, contour_data, tcs, root)
+main_functions(rec_field, wf, contour_data, tcs, root, iteration)
